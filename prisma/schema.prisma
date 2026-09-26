@@ -1,0 +1,96 @@
+// This schema is the database version of what your seedData.js / AppProvider
+// mock store already models. The one deliberate change: TXN-###### and
+// VND-#### numbers are no longer generated in JS (nextTxnId / nextVendorRefNo
+// in the old ledgerService.js) — they're now Postgres-native autoincrementing
+// columns (`seqNo`), and the API formats them into the display string. That
+// was flagged as a risk back when this only ran client-side: a client-picked
+// "next number" breaks the instant two people can write at once. The
+// database's own sequence counter can't produce the same number twice.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+
+  assignments UserSiteAssignment[]
+
+  @@map("users")
+}
+
+model Site {
+  // Not a DB-generated uuid on purpose — kept as a human-readable slug
+  // (e.g. "SITE-NAWABSHAH") to match what the frontend already expects and
+  // displays. Generated in application code (see sites.routes.js) from the
+  // site name, with a numeric suffix appended if that slug is already taken.
+  id             String   @id
+  name           String
+  location       String?
+  openingBalance Decimal  @default(0) @db.Decimal(14, 2)
+  createdAt      DateTime @default(now())
+
+  transactions Transaction[]
+  assignments  UserSiteAssignment[]
+
+  @@map("sites")
+}
+
+// Which users can see/edit which sites. Irrelevant for ADMINs — they bypass
+// this table entirely and see every site (enforced in route logic, not here).
+model UserSiteAssignment {
+  id     String @id @default(uuid())
+  userId String
+  siteId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, siteId])
+  @@map("user_site_assignments")
+}
+
+model Vendor {
+  id        String   @id @default(uuid())
+  seqNo     Int      @unique @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+
+  transactions Transaction[]
+
+  @@map("vendors")
+}
+
+model Transaction {
+  id                String   @id @default(uuid())
+  seqNo             Int      @unique @default(autoincrement())
+  srNo              Int
+  siteId            String
+  date              DateTime @db.Date
+  particular        String?
+  missingParticular Boolean  @default(false)
+  receipt           Decimal  @default(0) @db.Decimal(14, 2)
+  payment           Decimal  @default(0) @db.Decimal(14, 2)
+  vendorId          String?
+  createdAt         DateTime @default(now())
+
+  site   Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  vendor Vendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  @@map("transactions")
+}
