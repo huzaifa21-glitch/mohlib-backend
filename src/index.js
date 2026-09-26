@@ -34,6 +34,16 @@ app.use((err, req, res, next) => {
 });
 
 const port = process.env.PORT || 4000;
-app.listen(port, () => {
-  console.log(`API listening on http://localhost:${port}`);
-});
+
+// Only bind a port when this file is run directly (local dev with `node
+// src/index.js` or `npm run dev`). On Vercel, this file is imported as a
+// serverless function handler instead — Vercel calls the exported Express
+// app directly per request, so listening on a port here would be pointless
+// (and is skipped via the check below).
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`API listening on http://localhost:${port}`);
+  });
+}
+
+module.exports = app;
